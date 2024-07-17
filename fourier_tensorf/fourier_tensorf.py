@@ -88,7 +88,7 @@ class FourierTensorfModel(Model):
 
         if 'f' in self.config.tensorf_encoding:
             def on_change_callback(handle: ViewerSlider) -> None:
-                self.field.encoding.frequency_cap = int(handle.value)
+                self.field.encoding.set_frequency_cap(int(handle.value))
 
             max_freq = self.init_resolution//2 + 1
             self.frequency_cap = ViewerSlider(name="Frequency Cap", default_value=self.config.frequency_cap, 
@@ -112,7 +112,7 @@ class FourierTensorfModel(Model):
                 pass
             elif (step%self.config.increase_frequency_cap_every)==0:
                 self.field.encoding.increase_frequency_cap()
-                self.frequency_cap.value = self.field.encoding.frequency_cap
+                self.frequency_cap.value = self.field.encoding.get_frequency_cap()
 
         callbacks = [
             TrainingCallback(
@@ -317,7 +317,7 @@ class FourierTensorfModel(Model):
 
         psnr = self.psnr(image, rgb)
         ssim = cast(torch.Tensor, self.ssim(image, rgb))
-        lpips = self.lpips(image, rgb)
+        lpips = self.lpips(image, torch.clamp(rgb,0.0,1.0))
 
         metrics_dict = {
             "psnr": float(psnr.item()),

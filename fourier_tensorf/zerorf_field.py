@@ -92,9 +92,9 @@ class CommonDecoder(nn.Module):
             # Drop out 1% of specular batches to force a high quality diffuse reconstruction
             if self.train:
                 drop_out = (torch.rand((rgbs_specular.shape[0],1))<0.99).float().to(rgbs_specular.device).unsqueeze(-1)
-                rgbs =  self.rgb_activation(rgbs_diffuse + drop_out * rgbs_specular)
+                rgbs = self.rgb_activation(rgbs_diffuse + drop_out * rgbs_specular)
             else:
-                rgbs =  self.rgb_activation(rgbs_diffuse + rgbs_specular)
+                rgbs = self.rgb_activation(rgbs_diffuse + rgbs_specular)
             
         else:
             raise ValueError(f"rgb mode {self.rgb_mode} is not implemented")
@@ -111,7 +111,7 @@ class CommonDecoder(nn.Module):
             rgbs = self.get_rgbs(base_x,dirs)
             
             if self.sigmoid_saturation > 0:
-                rgbs = rgbs * (1 + self.sigmoid_saturation * 2) - self.sigmoid_saturation
+                rgbs = rgbs * (1 + self.sigmoid_saturation * 2) - 2*self.sigmoid_saturation
         return sigmas.unsqueeze(-1), rgbs
 
 

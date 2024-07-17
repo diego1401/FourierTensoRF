@@ -15,21 +15,28 @@ class FTensorCPEncoding(Encoding):
         init_scale: Initialization scale.
     """
 
-    def __init__(self, resolution: int = 256, num_components: int = 24, init_scale: float = 0.1, frequency_cap: int = 100) -> None:
+    def __init__(self, resolution: int = 256, num_components: int = 24, init_scale: float = 0.1, frequency_cap: int = 1) -> None:
         super().__init__(in_dim=3)
 
         self.resolution = resolution
         self.num_components = num_components
-        self.frequency_cap = frequency_cap
+        # self.frequency_cap = frequency_cap
+        self.register_buffer('frequency_cap',torch.tensor(frequency_cap))
         self.axis=2
         self.fourier_line_coef = torch.nn.Parameter(
             init_scale * torch.ones((3, num_components, resolution, 1)) # initialize as a constant so that fourier coefs have this shape -> [mean, 0, 0, ..., 0]
             )
 
+    def set_frequency_cap(self,value):
+        self.frequency_cap.fill_(value)
+
+    def get_frequency_cap(self):
+        return self.frequency_cap.item()
+
     @torch.no_grad()
     def increase_frequency_cap(self):
         '''Function to increase the frequency cap of the fourier coefficients preserved after clipping.'''
-        if self.frequency_cap == (self.resolution//2 + 1): return
+        if self.frequency_cap.item() == (self.resolution//2 + 1): return
         old_line = self.get_line_coef()
         self.frequency_cap += 1
         self.fourier_line_coef.data = old_line
@@ -39,7 +46,8 @@ class FTensorCPEncoding(Encoding):
         padded_tensor = torch.zeros_like(f_space)
         _, _, resolution, _ = f_space.shape
         
-        padded_tensor[:,:,:self.frequency_cap,:]  = f_space[:,:,:self.frequency_cap,:] 
+        f_cap = self.get_frequency_cap()
+        padded_tensor[:,:,:f_cap,:]  = f_space[:,:,:f_cap,:] 
         return torch.fft.irfft(padded_tensor,dim=self.axis)
     
     def get_out_dim(self) -> int:
@@ -56,15 +64,6 @@ class FTensorCPEncoding(Encoding):
         features = torch.moveaxis(features.view(self.num_components, *in_tensor.shape[:-1]), 0, -1)
 
         return features  # [..., Components]
-
-    def state_dict(self, *args, **kwargs):
-        state = super(Encoding, self).state_dict(*args, **kwargs)
-        state['frequency_cap'] = self.frequency_cap
-        return state
-
-    def load_state_dict(self, state_dict, *args, **kwargs):
-        self.tmp = state_dict.pop('frequency_cap', 100)  # Default to 0 if 'tmp' is not found
-        super(Encoding, self).load_state_dict(state_dict, *args, **kwargs)
 
 class FTensorVMEncoding(Encoding):
     plane_coef: Float[Tensor, "3 num_components resolution resolution"]
