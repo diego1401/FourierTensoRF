@@ -1,0 +1,137 @@
+import torch
+from torch import Tensor
+import torch.nn.functional as F
+
+from nerfstudio.field_components.encodings import Encoding
+from jaxtyping import Float
+
+
+class FTensorCPEncoding(Encoding):
+    """CP Decomposition inferred from Fourier coefficients
+
+    Args:
+        resolution: Resolution of grid.
+        num_components: Number of components per dimension.
+        init_scale: Initialization scale.
+    """
+
+    def __init__(self, resolution: int = 256, num_components: int = 24, init_scale: float = 0.1, frequency_cap: int = 100) -> None:
+        super().__init__(in_dim=3)
+
+        self.resolution = resolution
+        self.num_components = num_components
+        self.frequency_cap = frequency_cap
+        self.axis=2
+        self.fourier_line_coef = torch.nn.Parameter(
+            init_scale * torch.ones((3, num_components, resolution, 1)) # initialize as a constant so that fourier coefs have this shape -> [mean, 0, 0, ..., 0]
+            )
+
+    @torch.no_grad()
+    def increase_frequency_cap(self):
+        '''Function to increase the frequency cap of the fourier coefficients preserved after clipping.'''
+        if self.frequency_cap == (self.resolution//2 + 1): return
+        old_line = self.get_line_coef()
+        self.frequency_cap += 1
+        self.fourier_line_coef.data = old_line
+
+    def get_line_coef(self):
+        f_space = torch.fft.rfft(self.fourier_line_coef,dim=self.axis)
+        padded_tensor = torch.zeros_like(f_space)
+        _, _, resolution, _ = f_space.shape
+        
+        padded_tensor[:,:,:self.frequency_cap,:]  = f_space[:,:,:self.frequency_cap,:] 
+        return torch.fft.irfft(padded_tensor,dim=self.axis)
+    
+    def get_out_dim(self) -> int:
+        return self.num_components
+
+    def forward(self, in_tensor: Float[Tensor, "*bs input_dim"]) -> Float[Tensor, "*bs output_dim"]:
+        line_coord = torch.stack([in_tensor[..., 2], in_tensor[..., 1], in_tensor[..., 0]])  # [3, ...]
+        line_coord = torch.stack([torch.zeros_like(line_coord), line_coord], dim=-1)  # [3, ...., 2]
+
+        # Stop gradients from going to sampler
+        line_coord = line_coord.view(3, -1, 1, 2).detach()
+        line_features = F.grid_sample(self.get_line_coef(), line_coord, align_corners=True)  # [3, Components, -1, 1]
+        features = torch.prod(line_features, dim=0)
+        features = torch.moveaxis(features.view(self.num_components, *in_tensor.shape[:-1]), 0, -1)
+
+        return features  # [..., Components]
+
+    def state_dict(self, *args, **kwargs):
+        state = super(Encoding, self).state_dict(*args, **kwargs)
+        state['frequency_cap'] = self.frequency_cap
+        return state
+
+    def load_state_dict(self, state_dict, *args, **kwargs):
+        self.tmp = state_dict.pop('frequency_cap', 100)  # Default to 0 if 'tmp' is not found
+        super(Encoding, self).load_state_dict(state_dict, *args, **kwargs)
+
+class FTensorVMEncoding(Encoding):
+    plane_coef: Float[Tensor, "3 num_components resolution resolution"]
+    line_coef: Float[Tensor, "3 num_components resolution 1"]
+
+    def __init__(
+        self,
+        resolution: int = 128,
+        num_components: int = 24,
+        init_scale: float = 0.1,
+        frequency_cap: int = 100,
+    ) -> None:
+        super().__init__(in_dim=3)
+
+        self.resolution = resolution
+        self.num_components = num_components
+        self.frequency_cap = frequency_cap
+        self.axis = 2
+
+        self.plane_coef = torch.nn.Parameter(init_scale * torch.ones((3, num_components, resolution, resolution)))
+        self.line_coef = torch.nn.Parameter(init_scale * torch.ones((3, num_components, resolution, 1)))
+
+    def get_out_dim(self) -> int:
+        return self.num_components * 3
+
+    @torch.no_grad()
+    def increase_frequency_cap(self):
+        '''Function to increase the frequency cap of the fourier coefficients preserved after clipping.'''
+        if self.frequency_cap == (self.resolution//2 + 1): return
+        old_line = self.get_line_coef()
+        old_plane = self.get_plane_coef()
+        self.frequency_cap = min(self.frequency_cap + 1, self.resolution//2 + 1)
+        self.line_coef.data = old_line
+        self.plane_coef.data = old_plane
+
+    def get_plane_coef(self):
+        f_space = torch.fft.rfft2(self.plane_coef) #rfft2 applies the fourier transform to the last 2 dimensions
+        padded_tensor = torch.zeros_like(f_space)
+        padded_tensor[:,:,:,:self.frequency_cap]  = f_space[:,:,:,:self.frequency_cap]
+        return torch.fft.irfft2(padded_tensor)
+
+    def get_line_coef(self):
+        f_space = torch.fft.rfft(self.line_coef,dim=self.axis)
+        padded_tensor = torch.zeros_like(f_space)
+        padded_tensor[:,:,:self.frequency_cap,:]  = f_space[:,:,:self.frequency_cap,:] 
+        return torch.fft.irfft(padded_tensor,dim=self.axis)
+
+    def forward(self, in_tensor: Float[Tensor, "*bs input_dim"]) -> Float[Tensor, "*bs output_dim"]:
+        """Compute encoding for each position in in_positions
+
+        Args:
+            in_tensor: position inside bounds in range [-1,1],
+
+        Returns: Encoded position
+        """
+        plane_coord = torch.stack([in_tensor[..., [0, 1]], in_tensor[..., [0, 2]], in_tensor[..., [1, 2]]])  # [3,...,2]
+        line_coord = torch.stack([in_tensor[..., 2], in_tensor[..., 1], in_tensor[..., 0]])  # [3, ...]
+        line_coord = torch.stack([torch.zeros_like(line_coord), line_coord], dim=-1)  # [3, ...., 2]
+
+        # Stop gradients from going to sampler
+        plane_coord = plane_coord.view(3, -1, 1, 2).detach()
+        line_coord = line_coord.view(3, -1, 1, 2).detach()
+
+        plane_features = F.grid_sample(self.get_plane_coef(), plane_coord, align_corners=True)  # [3, Components, -1, 1]
+        line_features = F.grid_sample(self.get_line_coef(), line_coord, align_corners=True)  # [3, Components, -1, 1]
+
+        features = plane_features * line_features  # [3, Components, -1, 1]
+        features = torch.moveaxis(features.view(3 * self.num_components, *in_tensor.shape[:-1]), 0, -1)
+
+        return features  # [..., 3 * Components]
