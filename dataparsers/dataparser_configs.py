@@ -1,5 +1,7 @@
 # Including new dataset parsers
 from nerfstudio.plugins.registry_dataparser import DataParserSpecification
 from dataparsers.blender_free_nerf import BlenderFreeNeRFDataParserConfig
+from dataparsers.blender_zerorf import BlenderZeroRFDataParserConfig
 
 blender_free_nerf = DataParserSpecification(config=BlenderFreeNeRFDataParserConfig())
+blender_zerorf = DataParserSpecification(config=BlenderZeroRFDataParserConfig())

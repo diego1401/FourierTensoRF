@@ -52,10 +52,10 @@ fourier_tensorf = MethodSpecification(
                 "optimizer": AdamOptimizerConfig(lr=0.02),
                 "scheduler": ExponentialDecaySchedulerConfig(lr_final=0.002, max_steps=30000),
             },
-            "camera_opt": {
-                "optimizer": AdamOptimizerConfig(lr=1e-4, eps=1e-15),
-                "scheduler": ExponentialDecaySchedulerConfig(lr_final=1e-5, max_steps=5000),
-            }
+            # "camera_opt": {
+            #     "optimizer": AdamOptimizerConfig(lr=1e-4, eps=1e-15),
+            #     "scheduler": ExponentialDecaySchedulerConfig(lr_final=1e-5, max_steps=5000),
+            # }
         },
         viewer=ViewerConfig(num_rays_per_chunk=1 << 15),
         vis="viewer",

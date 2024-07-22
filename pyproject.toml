@@ -15,4 +15,5 @@ fourier_tensorf = 'fourier_tensorf.fourier_tensorf_config:fourier_tensorf'
 # register the entry point of your dataparser here:
 [project.entry-points.'nerfstudio.dataparser_configs']
 blender-free-nerf = 'dataparsers.dataparser_configs:blender_free_nerf'
+blender-zerorf = 'dataparsers.dataparser_configs:blender_zerorf'
 
