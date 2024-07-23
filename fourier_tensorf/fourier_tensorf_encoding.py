@@ -15,12 +15,11 @@ class FTensorCPEncoding(Encoding):
         init_scale: Initialization scale.
     """
 
-    def __init__(self, resolution: int = 256, num_components: int = 24, init_scale: float = 0.1, frequency_cap: int = 1) -> None:
+    def __init__(self, resolution: int = 256, num_components: int = 24, init_scale: float = 0.2, frequency_cap: int = 1) -> None:
         super().__init__(in_dim=3)
 
         self.resolution = resolution
         self.num_components = num_components
-        # self.frequency_cap = frequency_cap
         self.register_buffer('frequency_cap',torch.tensor(frequency_cap))
         self.axis=2
         self.fourier_line_coef = torch.nn.Parameter(
@@ -39,15 +38,15 @@ class FTensorCPEncoding(Encoding):
         if self.frequency_cap.item() == (self.resolution//2 + 1): return
         old_line = self.get_line_coef()
         self.frequency_cap += 1
-        self.fourier_line_coef.data = old_line
-
+        with torch.no_grad():
+            self.fourier_line_coef.copy_(old_line)
     def get_line_coef(self):
         f_space = torch.fft.rfft(self.fourier_line_coef,dim=self.axis)
         padded_tensor = torch.zeros_like(f_space)
         _, _, resolution, _ = f_space.shape
         
         f_cap = self.get_frequency_cap()
-        padded_tensor[:,:,:f_cap,:]  = f_space[:,:,:f_cap,:] 
+        padded_tensor[:,:,:f_cap,:]  = f_space[:,:,:f_cap,:]
         return torch.fft.irfft(padded_tensor,dim=self.axis)
     
     def get_out_dim(self) -> int:

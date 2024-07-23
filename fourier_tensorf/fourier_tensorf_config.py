@@ -49,7 +49,7 @@ fourier_tensorf = MethodSpecification(
                 "scheduler": ExponentialDecaySchedulerConfig(lr_final=0.001, max_steps=30000),
             },
             "encodings": {
-                "optimizer": AdamOptimizerConfig(lr=0.02),
+                "optimizer": AdamWOptimizerConfig(lr=0.02),
                 "scheduler": ExponentialDecaySchedulerConfig(lr_final=0.002, max_steps=30000),
             },
             # "camera_opt": {

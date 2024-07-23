@@ -2,7 +2,7 @@
 outputs/
 data/
 data_small/
-
+scripts/
 # Useless log files
 *.out
 *.json
