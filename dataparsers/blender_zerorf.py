@@ -26,7 +26,7 @@ class BlenderZeroRFDataParserConfig(BlenderDataParserConfig):
     _target: Type = field(default_factory=lambda: BlenderZeroRF)
     """target class to instantiate"""
 
-    number_of_views: int = 3
+    number_of_views: int = 4
     """Number of views chosen for the tas"""
 
 @dataclass

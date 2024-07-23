@@ -86,13 +86,20 @@ class FourierTensorfModel(Model):
 
         super().__init__(config=config, **kwargs)
 
-        if 'f' in self.config.tensorf_encoding:
+        if 'fcp' == self.config.tensorf_encoding:
             def on_change_callback(handle: ViewerSlider) -> None:
                 self.field.encoding.set_frequency_cap(int(handle.value))
 
             max_freq = self.init_resolution//2 + 1
             self.frequency_cap = ViewerSlider(name="Frequency Cap", default_value=self.config.frequency_cap, 
                                               min_value=1, max_value=max_freq, step=1,
+                                            cb_hook=on_change_callback)
+        elif 'fvm' == self.config.tensorf_encoding:
+            def on_change_callback(handle: ViewerSlider) -> None:
+                self.field.encoding.set_frequency_cap(float(handle.value))
+
+            self.frequency_cap = ViewerSlider(name="Frequency Cap", default_value=self.config.frequency_cap, 
+                                              min_value=1, max_value=100, step=1,
                                               cb_hook=on_change_callback)
 
         # self.b = ViewerNumber(name="Number", default_value=1.0)
@@ -266,7 +273,9 @@ class FourierTensorfModel(Model):
                 f_space_parameter = torch.fft.rfft(parameter,dim=2)
                 
                 if self.fourier_l1_weights is None:
-                    weights = torch.linspace(0, 1, steps=f_space_parameter.shape[-2])**3
+                    weights = torch.linspace(0, 1-1e-5, steps=f_space_parameter.shape[-2])**3
+                    #tranform of weights
+                    weights = torch.pow(weights,1/3)
                     self.fourier_l1_weights = (weights.repeat(3,f_space_parameter.shape[1],1).unsqueeze(-1).cuda())
                     
                 l1_soft = torch.real(f_space_parameter* self.fourier_l1_weights)

@@ -1,4 +1,4 @@
-
+import math
 import torch
 from torch import Tensor, nn
 from typing import Type
@@ -6,6 +6,31 @@ from nerfstudio.engine.optimizers import OptimizerConfig
 from dataclasses import dataclass
 from torch.autograd import Function
 from torch.cuda.amp import custom_bwd, custom_fwd
+
+def off_center_gaussian(kernel_size,sigma=1):
+    '''
+    Return off centered gaussian to much the DC of the 2D fft. The kernel returned is normalized as to obtain values between [0,1]
+    '''
+    # Create a x, y coordinate grid of shape (kernel_size, kernel_size, 2)
+    x_cord = torch.arange(kernel_size)
+    x_grid = x_cord.repeat(kernel_size).view(kernel_size, kernel_size)
+    y_grid = x_grid.t()
+    xy_grid = torch.stack([x_grid, y_grid], dim=-1)
+    mean = (kernel_size - 1)/2.
+    variance = sigma**2.
+
+    # Calculate the 2-dimensional gaussian kernel which is
+    # the product of two gaussian distributions for two different
+    # variables (in this case called x and y)
+    gaussian_kernel = (1./(2.*math.pi*variance)) *\
+                    torch.exp(
+                        -torch.sum((xy_grid - mean)**2., dim=-1) /\
+                        (2*variance)
+                    )[:kernel_size-1,:kernel_size-1]
+    # Make sure sum of values in gaussian kernel equals 1.
+    # gaussian_kernel = gaussian_kernel/ torch.sum(gaussian_kernel)
+    gaussian_kernel /= torch.max(gaussian_kernel)
+    return gaussian_kernel
 
 @dataclass
 class AdamWOptimizerConfig(OptimizerConfig):
